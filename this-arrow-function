@@ -1,0 +1,52 @@
+export default function transformer(file, api) {
+  const j = api.jscodeshift;
+  const getThisAssignedVariable = path => {
+    var arr = j(path).find(j.VariableDeclarator, {
+     id: {
+      type: "Identifier"
+     },
+     init: {
+      type: "ThisExpression"
+     }  
+   })
+    return arr;
+  };
+  const getThisVariable = (path,variableName) => {
+    return j(path).find(j.Identifier, {
+      name: variableName
+    });
+  }
+  const removeAllSelf = (thisVariableArray,variableName) => {
+    thisVariableArray.forEach(path => {
+      j(path).replaceWith(j.identifier('this'))
+    });
+  };
+  const createArrowFunction = (path) => {
+    j(path).replaceWith(j.arrowFunctionExpression(
+      	path.value.params,
+        path.value.body,
+        false
+    ))
+  }
+  const processThisAssignment = (path,variableName) => {
+    return j(path).find(j.FunctionExpression)
+    .forEach(path => {
+      var thisVariableArray = getThisVariable(path,variableName);
+      if (thisVariableArray.length) {
+      	removeAllSelf(thisVariableArray,variableName);
+      	createArrowFunction(path);
+      }
+    });
+  };
+  return j(file.source)
+    .find(j.FunctionDeclaration)
+    .forEach(path => {
+      let thisList = getThisAssignedVariable(path);
+      thisList.forEach(nodePath => {
+          let variableName = nodePath.value.id.name;
+          processThisAssignment(path,variableName);
+          j(nodePath).remove();
+        });
+    })
+    .toSource();
+}
